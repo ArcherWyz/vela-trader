@@ -9,21 +9,28 @@
 			<text id="datetimetext">更新于： {{datetime}}</text>
 		</div>
 		
-		<!-- 官方推荐列表用 list + list-item，见 https://iot.mi.com/vela/quickapp/zh/components/container/list.html ；勿在 for 上用 tid，否则节点复用会导致行情不重绘，见 for 循环指令文档 -->
+		<!-- 网格每行 3 个方块，仍用 list + list-item 做纵向滚动；勿在 for 上用 tid -->
 		<list id="scrollId" class="stock-list" onscrollbottom="handlescrollbottom">
-			<list-item for="{{list}}" class="item" type="stock-row" style="border-color:{{ $item.color }}" @longpress="deleteitem($item.QuoteID,$item.Name)">
-				<div class="item-main" @click="refreshOneQuote($item.QuoteID)">
-					<text class="itemtext itemtext-name" style="color:{{ $item.color }}" >{{ shortName($item.Name) }}</text>
-					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.jiage }}</text>
-					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.baifenbi }}%</text>
+			<list-item for="{{gridRows}}" class="grid-list-item" type="grid-row">
+				<div class="grid-row-wrap">
+					<div class="stock-cell" style="border-color:{{ gridCellBorderColor($item,0) }}" @click="onGridCellTap($item,0)" @longpress="onGridCellLongPress($item,0,$event)">
+						<text class="cell-line1" style="color:{{ gridCellQuoteColor($item,0) }}">{{ gridCellName($item,0) }}</text>
+						<text class="cell-line2" style="color:{{ gridCellQuoteColor($item,0) }}">{{ gridCellPct($item,0) }}</text>
+					</div>
+					<div class="stock-cell" style="border-color:{{ gridCellBorderColor($item,1) }}" @click="onGridCellTap($item,1)" @longpress="onGridCellLongPress($item,1,$event)">
+						<text class="cell-line1" style="color:{{ gridCellQuoteColor($item,1) }}">{{ gridCellName($item,1) }}</text>
+						<text class="cell-line2" style="color:{{ gridCellQuoteColor($item,1) }}">{{ gridCellPct($item,1) }}</text>
+					</div>
+					<div class="stock-cell" style="border-color:{{ gridCellBorderColor($item,2) }}" @click="onGridCellTap($item,2)" @longpress="onGridCellLongPress($item,2,$event)">
+						<text class="cell-line1" style="color:{{ gridCellQuoteColor($item,2) }}">{{ gridCellName($item,2) }}</text>
+						<text class="cell-line2" style="color:{{ gridCellQuoteColor($item,2) }}">{{ gridCellPct($item,2) }}</text>
+					</div>
 				</div>
-				<input class="item-pin" value="顶" @click="zhiding($item.QuoteID)" />
 			</list-item>
 		</list>
-		<div id="delectdiv" show="{{delectdivvisible}}" style="top:{{delectY}};left:{{delectX}}">
-			<text id="delectdivtext"> 删除 {{deletename}}?</text>
-			<input id="delectinput" value="确定" @click="shifoudelect('确定',deleteQuoteID)"/>
-			<input id="delectinput" value="取消" @click="shifoudelect('取消',deleteQuoteID)"/>
+		<div id="actionMenu" show="{{actionMenuVisible}}" class="action-menu" style="top:{{actionMenuY}};left:{{actionMenuX}}">
+			<input class="action-menu-btn" value="删除" @click="onActionMenuDelete"/>
+			<input class="action-menu-btn" value="置顶" @click="onActionMenuPin"/>
 		</div>
 	</div>
 </template>
@@ -38,11 +45,12 @@ export default {
 	data: {
 		list: [
 		],
-		deleteQuoteID:null,
-		deletename:null,
-		delectX:"70px",
-		delectY:"100px",
-		delectdivvisible:false,
+		gridRows: [],
+		actionMenuVisible: false,
+		actionQuoteID: null,
+		actionName: null,
+		actionMenuY: "140px",
+		actionMenuX: "95px",
 		datetime:"00:00:00",
 		Interval:null,
 		keepScreenTimer:null,
@@ -153,53 +161,95 @@ export default {
 			})
 		}
 	},
-	shifoudelect(str,deleteQuoteID){
+	removeQuoteFromStorage(quoteId){
 		var that=this
-		console.log(str,deleteQuoteID)
-		if(str=="确定"){
-			this.delectdivvisible=false
-			this.readToText().then(res=>{
-				var list=JSON.parse(res)
-				for(var i=0;i<list.length;i++){
-					if(list[i].QuoteID==deleteQuoteID){
-						console.log(list[i])
-						list.splice(i,1)
-					}
+		this.readToText().then(function(res){
+			var list=JSON.parse(res)
+			for(var i=0;i<list.length;i++){
+				if(list[i].QuoteID==quoteId){
+					list.splice(i,1)
 				}
-				console.log(list)
-				that.SaveToText(JSON.stringify(list))
-				that.read()
-
-			}).catch(err => {
-				prompt.showToast({
-						message: "错误",
-						duration: 1000,
-				});
-  			})
+			}
+			that.SaveToText(JSON.stringify(list))
+			that.read()
+		}).catch(function(){
+			prompt.showToast({
+				message: "错误",
+				duration: 1000,
+			})
+		})
+	},
+	buildGridRows(){
+		var L=this.list
+		var rows=[]
+		for(var i=0;i<L.length;i+=3){
+			var row={}
+			row.c0=L[i]
+			if(i+1<L.length){row.c1=L[i+1]}
+			if(i+2<L.length){row.c2=L[i+2]}
+			rows.push(row)
 		}
-		else if(str="取消"){
-			this.delectdivvisible=false
-		}
-		else{
-			this.delectdivvisible=false
+		this.gridRows=rows
+	},
+	gridCellItem(row,slot){
+		if(slot===0){return row.c0}
+		if(slot===1){return row.c1}
+		return row.c2
+	},
+	gridCellName(row,slot){
+		var it=this.gridCellItem(row,slot)
+		if(!it||it.Name===undefined||it.Name===null){return ""}
+		return it.Name
+	},
+	gridCellPct(row,slot){
+		var it=this.gridCellItem(row,slot)
+		if(!it||it.baifenbi===undefined||it.baifenbi===null){return ""}
+		return String(it.baifenbi)+"%"
+	},
+	gridCellQuoteColor(row,slot){
+		var it=this.gridCellItem(row,slot)
+		if(!it||!it.color){return "#333333"}
+		return it.color
+	},
+	gridCellBorderColor(row,slot){
+		var it=this.gridCellItem(row,slot)
+		if(!it||!it.color){return "#222222"}
+		return it.color
+	},
+	onGridCellTap(row,slot){
+		var it=this.gridCellItem(row,slot)
+		if(it&&it.QuoteID!==undefined&&it.QuoteID!==null&&it.QuoteID!==""){
+			this.refreshOneQuote(it.QuoteID)
 		}
 	},
-	shortName(name){
-		if(name===undefined||name===null){
-			return ""
+	onGridCellLongPress(row,slot,e){
+		var it=this.gridCellItem(row,slot)
+		if(it&&it.QuoteID!==undefined&&it.QuoteID!==null&&it.QuoteID!==""){
+			this.showStockActions(it.QuoteID,it.Name,e)
 		}
-		var s=String(name)
-		if(s.length<=5){
-			return s
-		}
-		return s.substring(0,6)+"…"
 	},
-	deleteitem(QuoteID,Name,e){
-		this.delectdivvisible=true
-		this.deletename=Name
-		this.deleteQuoteID=QuoteID
-		//this.delectX=e.clientX
-		this.delectY=e.clientY
+	showStockActions(QuoteID,Name,e){
+		this.actionMenuVisible=true
+		this.actionQuoteID=QuoteID
+		this.actionName=Name
+		if(e&&typeof e.clientY==="number"){
+			this.actionMenuY=e.clientY+"px"
+		}
+		if(e&&typeof e.clientX==="number"){
+			this.actionMenuX=e.clientX+"px"
+		}
+	},
+	onActionMenuDelete(){
+		var id=this.actionQuoteID
+		this.actionMenuVisible=false
+		if(id===undefined||id===null||id===""){
+			return
+		}
+		this.removeQuoteFromStorage(id)
+	},
+	onActionMenuPin(){
+		this.actionMenuVisible=false
+		this.zhiding(this.actionQuoteID)
 	},
 	refreshOneQuote(quoteId){
 		if(quoteId!==undefined&&quoteId!==null&&quoteId!==""){
@@ -230,6 +280,7 @@ export default {
 			var row=list.splice(idx,1)[0]
 			list.unshift(row)
 			that.list=list
+			that.buildGridRows()
 			that.SaveToText(JSON.stringify(list),"已置顶")
 		}).catch(err => {
 			prompt.showToast({
@@ -276,6 +327,7 @@ export default {
 					}
 					// 一次性赋值新数组，触发框架响应式重渲染
 					that.list=newList
+					that.buildGridRows()
 				}
 			},
 			fail: function(data, code) {
@@ -314,11 +366,13 @@ export default {
 					}catch(e){
 						that.list=[]
 					}
+					that.buildGridRows()
 					resolve()
 				},
 				fail: function (data, code) {
 					console.log(`handling fail, code = ${code}`);
 					that.list=[]
+					that.buildGridRows()
 					resolve()
 				},
 			})
@@ -439,32 +493,6 @@ export default {
 </script>
 
 <style>
-#delectinput{
-	border-style:solid;
-	border-width:1px;
-	border-color: white;
-	width: 90px;
-	height: 60px;
-	font-size: 25px;
-	color: white;
-	background-color: darkblue;
-}
-#delectdiv{
-	padding-left:5px;
-	padding-right:5px;
-	border-radius: 20px;
-	border-style:solid;
-	border-width:1px;
-	border-color: white;
-	
-	height: 60px;
-	position: absolute;
-	background-color:#000000;
-}
-#delectdivtext{
-	height: 60px;
-	font-size: 25px;
-}
 #datetime{
 	position: absolute;
 	top: 22px;
@@ -517,57 +545,72 @@ export default {
 	border-radius: 240px;
 	overflow: visible;
 }
-.item {
-	flex-direction: row;
-	align-items: center;
-	justify-content: space-between;
-	height: 50px;
+.grid-list-item {
 	width: 100%;
-	margin-bottom: 5px;
-	border-radius: 20px;
-	background-color: black;
-	padding-left: 6px;
-	padding-right: 6px;
-	padding-top: 10px;
-	padding-bottom: 10px;
-	border-style:solid;
-	border-width:1px;
-	border-color: white;
-}
-.item-main {
+	height: 100px;
+	margin-bottom: 8px;
 	flex-direction: row;
-	flex-grow: 1;
-	flex-shrink: 1;
-	justify-content: space-between;
 	align-items: center;
-	height: 100%;
+	justify-content: center;
 }
-.item-pin {
+.grid-row-wrap {
+	flex-direction: row;
+	width: 360px;
+	height: 100px;
+	align-items: center;
+	justify-content: space-between;
+}
+/* 无 box-sizing：118×98 内容区 + 1px 边框 ≈ 120×100 外廓；三列总宽约 360px */
+.stock-cell {
+	width: 118px;
+	height: 98px;
 	flex-shrink: 0;
-	width: 52px;
-	height: 44px;
-	margin-left: 6px;
-	font-size: 22px;
-	color: white;
-	background-color: #1a3a5c;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	border-style: solid;
+	border-width: 1px;
+	background-color: #000000;
+	border-radius: 4px;
+}
+.cell-line1 {
+	width: 100%;
+	font-size: 25px;
+	text-align: center;
+	lines: 1;
+	text-overflow: ellipsis;
+}
+.cell-line2 {
+	width: 100%;
+	font-size: 25px;
+	text-align: center;
+	lines: 1;
+	text-overflow: ellipsis;
+}
+.action-menu {
+	position: absolute;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	background-color: #000000;
 	border-style: solid;
 	border-width: 1px;
 	border-color: #ffffff;
 	border-radius: 12px;
+	padding: 8px;
 }
-.itemtext{
-	justify-content:space-between;
-	font-size: 25px;
-	color: white;
-	font-weight:100;
-}
-.itemtext-name {
-	flex-grow: 0;
-	flex-shrink: 0;
-	width: 108px;
+.action-menu-btn {
+	width: 88px;
+	height: 44px;
+	margin-left: 6px;
 	margin-right: 6px;
-	lines: 1;
-	text-overflow: ellipsis;
+	font-size: 20px;
+	color: #ffffff;
+	background-color: #1a3a5c;
+	border-style: solid;
+	border-width: 1px;
+	border-color: #ffffff;
+	border-radius: 10px;
 }
 
 </style>

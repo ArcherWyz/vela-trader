@@ -1,6 +1,6 @@
 {
-  "package": "com.application.watch.dinpan",
-  "name": "操盘手",
+  "package": "com.application.watch.dinpansquare",
+  "name": "操盘贴纸",
   "versionName": "1.0.0",
   "versionCode": 1,
   "minPlatformVersion": 1000,

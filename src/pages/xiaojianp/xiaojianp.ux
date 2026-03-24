@@ -22,7 +22,7 @@
 				<input value="0"  @click="onButtonClick('0')"></input>
 				<input value="  " style="background-color: black" ></input>
 				<input style="width:110px ;background-color: blueviolet;" value="搜索"  @click="sousuo"></input>
-				<input style="width:110px" value="退格"  @click="delete"></input>
+				<input style="width:110px" value="退格"  @click="onBackspace"></input>
 				<input value="  " style="background-color: black" ></input>
 				
 		</div>
@@ -109,10 +109,8 @@ export default {
 			},
 		});
 	},
-	delete(){
-		var that=this
+	onBackspace(){
 		this.code=this.code.substring(0,this.code.length-1)
-	
 	},
 	accessText() {
 		return new Promise((resolve, reject) => {
