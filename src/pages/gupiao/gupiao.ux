@@ -1,21 +1,25 @@
 <template>
 	<div class="page">
-		<div id="setting">
-			<input id="settinginput" @click="Setting" value="设置"></input>
-		</div>
-		<div id="Add">
-			<input id="Addinput" @click="xiaojianp" value="+"></input>
+		<div id="topActions">
+			<input class="topActBtn topActBtn-plus" @click="xiaojianp" value="+"></input>
+			<input class="topActBtn topActBtn-text" @click="Setting" value="设置"></input>
+			<input class="topActBtn topActBtn-text" @click="toggleKeepScreenTenMin" value="{{ keepHoldBtnText }}"></input>
 		</div>
 		<div id="datetime">
 			<text id="datetimetext">更新于： {{datetime}}</text>
 		</div>
 		
 		<scroll id="scrollId" scroll-y="true"  bounces="true" style="scroll-snap-type: y mandatory" onscrollbottom="handlescrollbottom" >
-			<div class="item" for="{{list}}" style="border-color:{{ $item.color }}" @click="chaxunhanqin( $item.QuoteID)" @longpress="deleteitem($item.QuoteID,$item.Name)">
-					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.Code }}</text>
-					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.Name }}</text>
-					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.jiage }}</text>
-					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.baifenbi }}%</text>
+			<div class="scroll-content">
+				<div class="item" for="{{list}}" tid="QuoteID" style="border-color:{{ $item.color }}" @longpress="deleteitem($item.QuoteID,$item.Name)">
+					<div class="item-main" @click="chaxunhanqin( $item.QuoteID)">
+						<text class="itemtext itemtext-name" style="color:{{ $item.color }}" >{{ shortName($item.Name) }}</text>
+						<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.jiage }}</text>
+						<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.baifenbi }}%</text>
+					</div>
+					<input class="item-pin" value="顶" @click="zhiding($item.QuoteID)" />
+				</div>
+				<div class="scroll-bottom-spacer"></div>
 			</div>
 		</scroll>
 		<div id="delectdiv" show="{{delectdivvisible}}" style="top:{{delectY}};left:{{delectX}}">
@@ -31,6 +35,7 @@ import fetch from '@system.fetch'
 import router from "@system.router";
 import prompt from "@system.prompt";
 import file from "@system.file";
+import brightness from "@system.brightness";
 export default {
 	data: {
 		list: [
@@ -41,7 +46,65 @@ export default {
 		delectY:"100px",
 		delectdivvisible:false,
 		datetime:"00:00:00",
-		Interval:null
+		Interval:null,
+		keepScreenTimer:null,
+		keepHoldBtnText:"常亮关"
+	},
+	toggleKeepScreenTenMin(){
+		var that=this
+		if(this.keepHoldBtnText==="常亮开"){
+			if(this.keepScreenTimer){
+				clearTimeout(this.keepScreenTimer)
+				this.keepScreenTimer=null
+			}
+			brightness.setKeepScreenOn({
+				keepScreenOn:false,
+				success:function(){
+					that.keepHoldBtnText="常亮关"
+					prompt.showToast({
+						message:"已关闭常亮",
+						duration:1000,
+					})
+				},
+				fail:function(){
+					that.keepHoldBtnText="常亮关"
+					prompt.showToast({
+						message:"关闭常亮失败",
+						duration:1500,
+					})
+				}
+			})
+			return
+		}
+		if(this.keepScreenTimer){
+			clearTimeout(this.keepScreenTimer)
+			this.keepScreenTimer=null
+		}
+		brightness.setKeepScreenOn({
+			keepScreenOn:true,
+			success:function(){
+				that.keepHoldBtnText="常亮开"
+				prompt.showToast({
+					message:"已常亮，10分钟后恢复",
+					duration:1500,
+				})
+				that.keepScreenTimer=setTimeout(function(){
+					that.keepScreenTimer=null
+					that.keepHoldBtnText="常亮关"
+					brightness.setKeepScreenOn({
+						keepScreenOn:false,
+						fail:function(){}
+					})
+				},600000)
+			},
+			fail:function(){
+				that.keepHoldBtnText="常亮关"
+				prompt.showToast({
+					message:"常亮失败，请检查系统权限",
+					duration:2000,
+				})
+			}
+		})
 	},
 	shifoudelect(str,deleteQuoteID){
 		var that=this
@@ -74,12 +137,54 @@ export default {
 			this.delectdivvisible=false
 		}
 	},
+	shortName(name){
+		if(name===undefined||name===null){
+			return ""
+		}
+		var s=String(name)
+		if(s.length<=5){
+			return s
+		}
+		return s.substring(0,6)+"…"
+	},
 	deleteitem(QuoteID,Name,e){
 		this.delectdivvisible=true
 		this.deletename=Name
 		this.deleteQuoteID=QuoteID
 		//this.delectX=e.clientX
 		this.delectY=e.clientY
+	},
+	zhiding(QuoteID){
+		var that=this
+		this.readToText().then(res=>{
+			var list=JSON.parse(res)
+			var idx=-1
+			for(var i=0;i<list.length;i++){
+				if(list[i].QuoteID==QuoteID){
+					idx=i
+					break
+				}
+			}
+			if(idx<0){
+				return
+			}
+			if(idx===0){
+				prompt.showToast({
+					message: "已在顶部",
+					duration: 1000,
+				})
+				return
+			}
+			var row=list.splice(idx,1)[0]
+			list.unshift(row)
+			that.list=list
+			that.SaveToText(JSON.stringify(list),"已置顶")
+		}).catch(err => {
+			prompt.showToast({
+				message: "错误",
+				duration: 1000,
+			})
+		})
 	},
 	chaxunhanqin(secids){
 		var that=this
@@ -92,26 +197,18 @@ export default {
 					var now = new Date();
 					that.datetime=now.getHours()+":"+now.getMinutes()+":"+now.getSeconds()
 					for(var j=0;j<response.data.data.total;j++){
+						var diff=response.data.data.diff[j]
 						for(var i=0;i<that.list.length;i++){
-							if(that.list[i].Code==response.data.data.diff[j].f12){
-							//	console.log(response.data.data.diff[j])
-							//	console.log(Date(),that.list[i].Name ,response.data.data.diff[j].f2/Math.pow(10,response.data.data.diff[j].f1),response.data.data.diff[j].f3/Math.pow(10,2))
-								that.list[i].jiage=response.data.data.diff[j].f2/Math.pow(10,response.data.data.diff[j].f1)
-								that.list[i].baifenbi=response.data.data.diff[j].f3/Math.pow(10,2)
-								if(response.data.data.diff[j].f3>0){
-									that.list[i].color="red"
-								}else if(response.data.data.diff[j].f3<0){
-									that.list[i].color="lawngreen"
-								}else{
-									that.list[i].color="white"
-								}
+							if(that.list[i].Code==diff.f12){
+								that.list[i].jiage=diff.f2/Math.pow(10,diff.f1)
+								that.list[i].baifenbi=diff.f3/Math.pow(10,2)
+								that.list[i].color=diff.f3>0?"red":(diff.f3<0?"lawngreen":"white")
 								break;
 							}
 						}
 					}
-
-				}else{
-
+					// 深层属性突变后强制重赋数组引用，触发框架响应式重渲染
+					that.list=that.list.slice()
 				}
 			},
 			fail: function(data, code) {
@@ -223,15 +320,15 @@ export default {
 			});
 		})
 	},
-	SaveToText(str){
-		//写文本到文件
+	SaveToText(str,successMessage){
+		var toastMsg=successMessage!==undefined&&successMessage!==null&&successMessage!==""?successMessage:"删除成功"
 		file.writeText({
 			uri: "internal://mass/zixuan.txt",
 			text: str,
 			append:false,
 			success: function () {
 				prompt.showToast({
-					message: "删除成功",
+					message: toastMsg,
 					duration: 1000,
 				});
 			},
@@ -293,86 +390,113 @@ export default {
 	font-size: 20px;
 
 }
-#setting{
-	justify-content:center;
+/* 圆形表盘在上部 y≈50 处弦宽约 294px，固定 300+left:110 会超出圆内可见区导致右侧被裁切 */
+#topActions{
 	position: absolute;
-	width: 100px;
-	height: 50px;
+	left: 95px;
 	top: 50px;
-	left: 270px;
+	width: 290px;
+	height: 50px;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	overflow: visible;
 }
-#settinginput {
-	border-style:solid;
-	border-width:1px;
+.topActBtn{
+	flex-shrink: 0;
+	height: 46px;
+	border-style: solid;
+	border-width: 1px;
 	border-color: white;
-
-	height: 50px;
-	background-color:black;
+	background-color: black;
 	color: white;
-	width: 100px;
+	border-radius: 10px;
 }
-#Add{
-	position: absolute;
-	height: 50px;
-	width: 150px;
-	top: 50px;
-	left: 110px;
+.topActBtn-plus{
+	width: 80px;
+	font-size: 28px;
 }
-#Addinput{
-	border-style:solid;
-	border-width:1px;
-	border-color: white;
-
-	background-color:black;
-	color: white;
-	height: 50px;
-	width: 150px;
+.topActBtn-text{
+	width: 85px;
+	font-size: 20px;
 }
 #scrollId {
 	top: 110px;
-	height: 260px;
+	/* 列表可视区域高度 */
+	height: 370px;
 	width: 400px;
-	/* 交叉轴居中 */
 	align-items: center;
-	/* 纵向排列 */
 	flex-direction: column;
+}
+.scroll-content {
+	flex-direction: column;
+	align-items: center;
+	width: 100%;
+}
+/* 底部留白：滚到底时仍可将最后一条移到视窗中部 */
+.scroll-bottom-spacer {
+	width: 100%;
+	height: 200px;
+	flex-shrink: 0;
 }
 .page {
-	/* 交叉轴居中 */
 	align-items: center;
-	/* 纵向排列 */
 	flex-direction: column;
-
 	background-color: #000000;
 	border-radius: 240px;
+	overflow: visible;
 }
 .item {
-	/* 有剩余空间时，允许被拉伸 */
-	/*flex-grow: 1;*/
-	/* 空间不够用时，不允许被压缩 */
-	/*flex-shrink: 0;*/
-	/* 主轴居中 */
-	justify-content:space-between;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
 	height: 50px;
 	width: 100%;
 	margin-bottom: 5px;
 	border-radius: 20px;
-	/*background-color: #5f4242;*/
 	background-color: black;
-	padding-left: 10px;
-	padding-right: 10px;
-
+	padding-left: 6px;
+	padding-right: 6px;
 	padding-top: 10px;
 	padding-bottom: 10px;
 	border-style:solid;
 	border-width:1px;
 	border-color: white;
 }
+.item-main {
+	flex-direction: row;
+	flex-grow: 1;
+	flex-shrink: 1;
+	justify-content: space-between;
+	align-items: center;
+	height: 100%;
+}
+.item-pin {
+	flex-shrink: 0;
+	width: 52px;
+	height: 44px;
+	margin-left: 6px;
+	font-size: 22px;
+	color: white;
+	background-color: #1a3a5c;
+	border-style: solid;
+	border-width: 1px;
+	border-color: #ffffff;
+	border-radius: 12px;
+}
 .itemtext{
 	justify-content:space-between;
 	font-size: 25px;
 	color: white;
 	font-weight:100;
+}
+.itemtext-name {
+	flex-grow: 0;
+	flex-shrink: 0;
+	width: 108px;
+	margin-right: 6px;
+	lines: 1;
+	text-overflow: ellipsis;
 }
 
 </style>

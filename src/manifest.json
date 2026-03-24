@@ -23,6 +23,9 @@
     },
     {
       "name": "system.fetch"
+    },
+    {
+      "name": "system.brightness"
     }
   ],
   "config": {
