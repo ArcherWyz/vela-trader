@@ -1,31 +1,29 @@
 <template>
 	<div class="page">
 		<div id="topActions">
-			<input class="topActBtn topActBtn-plus" @click="xiaojianp" value="+"></input>
-			<input class="topActBtn topActBtn-text" @click="Setting" value="设置"></input>
-			<input class="topActBtn topActBtn-text" @click="toggleKeepScreenTenMin" value="{{ keepHoldBtnText }}"></input>
+			<input class="topActBtn topActBtn-plus" @click="xiaojianp" value="+"/>
+			<input class="topActBtn topActBtn-text" @click="Setting" value="设置"/>
+			<input class="topActBtn topActBtn-text" @click="toggleKeepScreenCycle" value="{{ keepHoldBtnText }}"/>
 		</div>
 		<div id="datetime">
 			<text id="datetimetext">更新于： {{datetime}}</text>
 		</div>
 		
-		<scroll id="scrollId" scroll-y="true"  bounces="true" style="scroll-snap-type: y mandatory" onscrollbottom="handlescrollbottom" >
-			<div class="scroll-content">
-				<div class="item" for="{{list}}" tid="QuoteID" style="border-color:{{ $item.color }}" @longpress="deleteitem($item.QuoteID,$item.Name)">
-					<div class="item-main" @click="chaxunhanqin( $item.QuoteID)">
-						<text class="itemtext itemtext-name" style="color:{{ $item.color }}" >{{ shortName($item.Name) }}</text>
-						<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.jiage }}</text>
-						<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.baifenbi }}%</text>
-					</div>
-					<input class="item-pin" value="顶" @click="zhiding($item.QuoteID)" />
+		<!-- 官方推荐列表用 list + list-item，见 https://iot.mi.com/vela/quickapp/zh/components/container/list.html ；勿在 for 上用 tid，否则节点复用会导致行情不重绘，见 for 循环指令文档 -->
+		<list id="scrollId" class="stock-list" onscrollbottom="handlescrollbottom">
+			<list-item for="{{list}}" class="item" type="stock-row" style="border-color:{{ $item.color }}" @longpress="deleteitem($item.QuoteID,$item.Name)">
+				<div class="item-main" @click="refreshOneQuote($item.QuoteID)">
+					<text class="itemtext itemtext-name" style="color:{{ $item.color }}" >{{ shortName($item.Name) }}</text>
+					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.jiage }}</text>
+					<text class="itemtext" style="color:{{ $item.color }}" >{{ $item.baifenbi }}%</text>
 				</div>
-				<div class="scroll-bottom-spacer"></div>
-			</div>
-		</scroll>
+				<input class="item-pin" value="顶" @click="zhiding($item.QuoteID)" />
+			</list-item>
+		</list>
 		<div id="delectdiv" show="{{delectdivvisible}}" style="top:{{delectY}};left:{{delectX}}">
 			<text id="delectdivtext"> 删除 {{deletename}}?</text>
-			<input id="delectinput"value="确定" @click="shifoudelect('确定',deleteQuoteID)"> 
-			<input id="delectinput"value="取消" @click="shifoudelect('取消',deleteQuoteID)"> 
+			<input id="delectinput" value="确定" @click="shifoudelect('确定',deleteQuoteID)"/>
+			<input id="delectinput" value="取消" @click="shifoudelect('取消',deleteQuoteID)"/>
 		</div>
 	</div>
 </template>
@@ -48,18 +46,96 @@ export default {
 		datetime:"00:00:00",
 		Interval:null,
 		keepScreenTimer:null,
-		keepHoldBtnText:"常亮关"
+		keepHoldBtnText:"常亮关",
+		/* 0 关闭 1 常亮10分钟 2 常亮30分钟，点击循环：关→10分→30分→关 */
+		keepScreenPhase:0
 	},
-	toggleKeepScreenTenMin(){
+	clearKeepScreenTimer(){
+		if(this.keepScreenTimer){
+			clearTimeout(this.keepScreenTimer)
+			this.keepScreenTimer=null
+		}
+	},
+	finishKeepScreenByTimer(){
 		var that=this
-		if(this.keepHoldBtnText==="常亮开"){
-			if(this.keepScreenTimer){
-				clearTimeout(this.keepScreenTimer)
-				this.keepScreenTimer=null
+		this.clearKeepScreenTimer()
+		this.keepScreenPhase=0
+		this.keepHoldBtnText="常亮关"
+		brightness.setKeepScreenOn({
+			keepScreenOn:false,
+			fail:function(){}
+		})
+		prompt.showToast({
+			message:"常亮时间结束",
+			duration:1500,
+		})
+	},
+	scheduleKeepScreenEnd(ms,phaseWhenScheduled){
+		var that=this
+		this.clearKeepScreenTimer()
+		this.keepScreenTimer=setTimeout(function(){
+			that.keepScreenTimer=null
+			if(that.keepScreenPhase===phaseWhenScheduled){
+				that.finishKeepScreenByTimer()
 			}
+		},ms)
+	},
+	toggleKeepScreenCycle(){
+		var that=this
+		if(this.keepScreenPhase===0){
+			this.clearKeepScreenTimer()
+			brightness.setKeepScreenOn({
+				keepScreenOn:true,
+				success:function(){
+					that.keepScreenPhase=1
+					that.keepHoldBtnText="10分"
+					prompt.showToast({
+						message:"常亮10分钟",
+						duration:1500,
+					})
+					that.scheduleKeepScreenEnd(600000,1)
+				},
+				fail:function(){
+					that.keepScreenPhase=0
+					that.keepHoldBtnText="常亮关"
+					prompt.showToast({
+						message:"常亮失败，请检查系统权限",
+						duration:2000,
+					})
+				}
+			})
+			return
+		}
+		if(this.keepScreenPhase===1){
+			this.clearKeepScreenTimer()
+			brightness.setKeepScreenOn({
+				keepScreenOn:true,
+				success:function(){
+					that.keepScreenPhase=2
+					that.keepHoldBtnText="30分"
+					prompt.showToast({
+						message:"常亮30分钟",
+						duration:1500,
+					})
+					that.scheduleKeepScreenEnd(1800000,2)
+				},
+				fail:function(){
+					that.keepScreenPhase=0
+					that.keepHoldBtnText="常亮关"
+					prompt.showToast({
+						message:"常亮失败，请检查系统权限",
+						duration:2000,
+					})
+				}
+			})
+			return
+		}
+		if(this.keepScreenPhase===2){
+			this.clearKeepScreenTimer()
 			brightness.setKeepScreenOn({
 				keepScreenOn:false,
 				success:function(){
+					that.keepScreenPhase=0
 					that.keepHoldBtnText="常亮关"
 					prompt.showToast({
 						message:"已关闭常亮",
@@ -67,6 +143,7 @@ export default {
 					})
 				},
 				fail:function(){
+					that.keepScreenPhase=0
 					that.keepHoldBtnText="常亮关"
 					prompt.showToast({
 						message:"关闭常亮失败",
@@ -74,37 +151,7 @@ export default {
 					})
 				}
 			})
-			return
 		}
-		if(this.keepScreenTimer){
-			clearTimeout(this.keepScreenTimer)
-			this.keepScreenTimer=null
-		}
-		brightness.setKeepScreenOn({
-			keepScreenOn:true,
-			success:function(){
-				that.keepHoldBtnText="常亮开"
-				prompt.showToast({
-					message:"已常亮，10分钟后恢复",
-					duration:1500,
-				})
-				that.keepScreenTimer=setTimeout(function(){
-					that.keepScreenTimer=null
-					that.keepHoldBtnText="常亮关"
-					brightness.setKeepScreenOn({
-						keepScreenOn:false,
-						fail:function(){}
-					})
-				},600000)
-			},
-			fail:function(){
-				that.keepHoldBtnText="常亮关"
-				prompt.showToast({
-					message:"常亮失败，请检查系统权限",
-					duration:2000,
-				})
-			}
-		})
 	},
 	shifoudelect(str,deleteQuoteID){
 		var that=this
@@ -154,6 +201,11 @@ export default {
 		//this.delectX=e.clientX
 		this.delectY=e.clientY
 	},
+	refreshOneQuote(quoteId){
+		if(quoteId!==undefined&&quoteId!==null&&quoteId!==""){
+			this.chaxunhanqin(String(quoteId))
+		}
+	},
 	zhiding(QuoteID){
 		var that=this
 		this.readToText().then(res=>{
@@ -196,19 +248,34 @@ export default {
 				if(response.data.data.total>0){
 					var now = new Date();
 					that.datetime=now.getHours()+":"+now.getMinutes()+":"+now.getSeconds()
+					// 先把当前列表全部复制为全新对象，切断旧引用
+					var newList=[]
+					for(var k=0;k<that.list.length;k++){
+						newList.push({
+							Code:     that.list[k].Code,
+							QuoteID:  that.list[k].QuoteID,
+							Name:     that.list[k].Name,
+							jiage:    that.list[k].jiage,
+							baifenbi: that.list[k].baifenbi,
+							color:    that.list[k].color
+						})
+					}
+					// 用行情数据更新 newList（Code / f12 统一成字符串再比，避免类型不一致导致永远对不上）
 					for(var j=0;j<response.data.data.total;j++){
 						var diff=response.data.data.diff[j]
-						for(var i=0;i<that.list.length;i++){
-							if(that.list[i].Code==diff.f12){
-								that.list[i].jiage=diff.f2/Math.pow(10,diff.f1)
-								that.list[i].baifenbi=diff.f3/Math.pow(10,2)
-								that.list[i].color=diff.f3>0?"red":(diff.f3<0?"lawngreen":"white")
+						var codeKey=diff.f12===undefined||diff.f12===null?"":String(diff.f12)
+						for(var i=0;i<newList.length;i++){
+							var rowCode=newList[i].Code===undefined||newList[i].Code===null?"":String(newList[i].Code)
+							if(rowCode===codeKey){
+								newList[i].jiage=diff.f2/Math.pow(10,diff.f1)
+								newList[i].baifenbi=diff.f3/Math.pow(10,2)
+								newList[i].color=diff.f3>0?"red":(diff.f3<0?"lawngreen":"white")
 								break;
 							}
 						}
 					}
-					// 深层属性突变后强制重赋数组引用，触发框架响应式重渲染
-					that.list=that.list.slice()
+					// 一次性赋值新数组，触发框架响应式重渲染
+					that.list=newList
 				}
 			},
 			fail: function(data, code) {
@@ -238,30 +305,48 @@ export default {
 	},
 	read() {
 		var that=this
-		file.readText({
-			uri: "internal://mass/zixuan.txt",
-			success: function (data) {
-				that.list=JSON.parse(data.text)
-			},
-			fail: function (data, code) {
-				console.log(`handling fail, code = ${code}`);
-			},
-		});
+		return new Promise(function(resolve){
+			file.readText({
+				uri: "internal://mass/zixuan.txt",
+				success: function (data) {
+					try{
+						that.list=JSON.parse(data.text)
+					}catch(e){
+						that.list=[]
+					}
+					resolve()
+				},
+				fail: function (data, code) {
+					console.log(`handling fail, code = ${code}`);
+					that.list=[]
+					resolve()
+				},
+			})
+		})
 	},
 	onShow() {
 		var that=this
-		this.read()
-		setTimeout(function(){
-			var sss=[]
-			for(var i=0;i<that.list.length;i++){
-				sss.push(that.list[i].QuoteID)
-			}
-			if(sss.length>0){
+		if(that.Interval){
+			clearInterval(that.Interval)
+			that.Interval=null
+		}
+		// 先读完自选再拉行情与设 interval，避免 read 未完成时 that.list 为空导致「时间变、列表不变」
+		that.read().then(function(){
+			setTimeout(function(){
+				var sss=[]
+				for(var i=0;i<that.list.length;i++){
+					sss.push(that.list[i].QuoteID)
+				}
+				if(sss.length>0){
 					that.chaxunhanqin(sss.join(","))
 				}
-		},1000)
-		
-		this.readToSetText().then(res=>{
+			},400)
+			return that.readToSetText()
+		}).then(function(res){
+			var sec=parseInt(String(res).trim(),10)
+			if(isNaN(sec)||sec<1){
+				sec=5
+			}
 			that.Interval=setInterval(function(){
 				var sss=[]
 				for(var i=0;i<that.list.length;i++){
@@ -270,8 +355,8 @@ export default {
 				if(sss.length>0){
 					that.chaxunhanqin(sss.join(","))
 				}
-			},res*1000)
-		}).catch(err=>{
+			},sec*1000)
+		}).catch(function(){
 			that.Interval=setInterval(function(){
 				var sss=[]
 				for(var i=0;i<that.list.length;i++){
@@ -345,13 +430,11 @@ export default {
 	 // this.scrollTop();
     },
 	scrollTop() {
-      console.info('1111')
-      this.$element('scrollId').scrollTo({
-        top: 0,
-        left: 0,
-        behavior: 'instant'
-      })
-    }
+		this.$element('scrollId').scrollTo({
+			index: 0,
+			behavior: 'instant'
+		})
+	}
 };
 </script>
 
@@ -422,22 +505,10 @@ export default {
 }
 #scrollId {
 	top: 110px;
-	/* 列表可视区域高度 */
 	height: 370px;
 	width: 400px;
-	align-items: center;
-	flex-direction: column;
-}
-.scroll-content {
-	flex-direction: column;
-	align-items: center;
-	width: 100%;
-}
-/* 底部留白：滚到底时仍可将最后一条移到视窗中部 */
-.scroll-bottom-spacer {
-	width: 100%;
-	height: 200px;
-	flex-shrink: 0;
+	/* 底部留白，便于最后一条滚到视窗中部 */
+	padding-bottom: 200px;
 }
 .page {
 	align-items: center;
