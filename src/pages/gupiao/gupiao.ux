@@ -16,14 +16,17 @@
 					<div class="stock-cell" style="border-color:{{ gridCellBorderColor($item,0) }}" @click="onGridCellTap($item,0)" @longpress="onGridCellLongPress($item,0,$event)">
 						<text class="cell-line1" style="color:{{ gridCellQuoteColor($item,0) }}">{{ gridCellName($item,0) }}</text>
 						<text class="cell-line2" style="color:{{ gridCellQuoteColor($item,0) }}">{{ gridCellPct($item,0) }}</text>
+						<text class="cell-line3" style="color:{{ gridCellQuoteColor($item,0) }}">{{ gridCellJiage($item,0) }}</text>
 					</div>
 					<div class="stock-cell" style="border-color:{{ gridCellBorderColor($item,1) }}" @click="onGridCellTap($item,1)" @longpress="onGridCellLongPress($item,1,$event)">
 						<text class="cell-line1" style="color:{{ gridCellQuoteColor($item,1) }}">{{ gridCellName($item,1) }}</text>
 						<text class="cell-line2" style="color:{{ gridCellQuoteColor($item,1) }}">{{ gridCellPct($item,1) }}</text>
+						<text class="cell-line3" style="color:{{ gridCellQuoteColor($item,1) }}">{{ gridCellJiage($item,1) }}</text>
 					</div>
 					<div class="stock-cell" style="border-color:{{ gridCellBorderColor($item,2) }}" @click="onGridCellTap($item,2)" @longpress="onGridCellLongPress($item,2,$event)">
 						<text class="cell-line1" style="color:{{ gridCellQuoteColor($item,2) }}">{{ gridCellName($item,2) }}</text>
 						<text class="cell-line2" style="color:{{ gridCellQuoteColor($item,2) }}">{{ gridCellPct($item,2) }}</text>
+						<text class="cell-line3" style="color:{{ gridCellQuoteColor($item,2) }}">{{ gridCellJiage($item,2) }}</text>
 					</div>
 				</div>
 			</list-item>
@@ -205,6 +208,11 @@ export default {
 		var it=this.gridCellItem(row,slot)
 		if(!it||it.baifenbi===undefined||it.baifenbi===null){return ""}
 		return String(it.baifenbi)+"%"
+	},
+	gridCellJiage(row,slot){
+		var it=this.gridCellItem(row,slot)
+		if(!it||it.jiage===undefined||it.jiage===null){return ""}
+		return String(it.jiage)
 	},
 	gridCellQuoteColor(row,slot){
 		var it=this.gridCellItem(row,slot)
@@ -560,7 +568,7 @@ export default {
 	align-items: center;
 	justify-content: space-between;
 }
-/* 无 box-sizing：118×98 内容区 + 1px 边框 ≈ 120×100 外廓；三列总宽约 360px */
+/* 无 box-sizing：118×98 内容区 + 1px 边框 ≈ 120×130 外廓；三列总宽约 360px */
 .stock-cell {
 	width: 118px;
 	height: 98px;
@@ -583,6 +591,13 @@ export default {
 .cell-line2 {
 	width: 100%;
 	font-size: 25px;
+	text-align: center;
+	lines: 1;
+	text-overflow: ellipsis;
+}
+.cell-line3 {
+	width: 100%;
+	font-size: 20px;
 	text-align: center;
 	lines: 1;
 	text-overflow: ellipsis;

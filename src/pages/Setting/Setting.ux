@@ -3,9 +3,6 @@
 			<text ></text>
 			<text class="title">刷新间隔：{{ sliderValue }}秒</text>
 			<slider class="slider" min="1" max="10" step="1" value="{{ initialSliderValue }}" onchange="onSliderChange"></slider>
-			<div >
-				<image style="width: 230px;height:230px" src="/common/zanshan.jpg" />
-			</div>
 	</div>
 </template>
 
